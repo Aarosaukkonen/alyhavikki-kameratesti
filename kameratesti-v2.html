@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="fi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>ÄLYHÄVIKKI – kameratesti v2</title>
+  <style>
+    :root { font-family: system-ui,-apple-system,Segoe UI,Roboto,sans-serif; color:#163d43; background:#f1f7f3; }
+    * { box-sizing:border-box; }
+    body { max-width:740px; padding:20px 14px 55px; margin:auto; }
+    h1 { font-size:1.6rem; margin:0 0 8px; }
+    h2 { font-size:1.13rem; margin:0 0 10px; }
+    p { line-height:1.55; }
+    .subtitle { color:#4c655b; margin:0 0 24px; }
+    .panel { border:1px solid #caddd2; background:white; border-radius:18px; padding:18px; margin:16px 0; box-shadow:0 2px 10px #153e3510; }
+    .btn { display:block; width:100%; background:#174650; border:1px solid #174650; color:#fff; font:600 1rem system-ui; padding:14px; border-radius:12px; margin-top:10px; cursor:pointer; text-align:center; }
+    .btn.secondary { background:#fff; color:#174650; border:1px solid #abcbbd; }
+    .btn:disabled { opacity:.55; cursor:default; }
+    label { display:block; font-weight:700; margin-top:14px; }
+    input[type=text] { padding:13px; font:1.1rem system-ui; width:100%; border:1px solid #b6ccc1; border-radius:10px; margin-top:8px; }
+    input[type=file] { width:100%; font-size:1rem; margin:12px 0 0; }
+    video, img.preview { width:100%; max-height:350px; object-fit:contain; border-radius:12px; background:#0b1e21; margin-top:12px; }
+    video[hidden], img[hidden] { display:none; }
+    .status { background:#f0f5f1; border:1px solid #d1e2d5; padding:12px; margin-top:12px; border-radius:11px; white-space:pre-wrap; line-height:1.5; overflow-wrap:anywhere; }
+    .small { font-size:.9rem; color:#60746b; }
+    .links a { color:#1265aa; overflow-wrap:anywhere; }
+    .ok { color:#126444; }
+    .bad { color:#a03c23; }
+    .viewer { overflow:hidden; background:#0b1e21; border-radius:12px; margin-top:12px; position:relative; }
+    .viewer video { display:block; width:100%; height:275px; max-height:none; margin:0; object-fit:cover; transform-origin:center center; touch-action:manipulation; }
+    .viewer[hidden], .controls[hidden], .confirmation[hidden], .control-item[hidden] { display:none; }
+    .controls { margin-top:14px; padding:12px; border-radius:12px; background:#f1f7f3; }
+    .controls .control-item { margin:10px 0; }
+    input[type=range] { width:100%; accent-color:#174650; }
+    .controls label { margin:3px 0 8px; }
+    .hint { font-size:.87rem; color:#597369; margin:4px 0; }
+    .confirmation { background:#fff8e9; border:1px solid #e6d49a; padding:13px; border-radius:12px; margin-top:10px; }
+    .confirmation b { font-size:1.35rem; letter-spacing:.02em; }
+    .ring { position:absolute; height:34px; width:34px; border:2px solid #fff; box-shadow:0 0 0 2px #164550; border-radius:50%; transform:translate(-50%,-50%); pointer-events:none; }
+    .ring[hidden] { display:none; }
+    .row-buttons { display:flex; gap:8px; }
+    .row-buttons > button { flex:1; }
+    @media(max-width:400px){.row-buttons{display:block;}}
+
+  </style>
+</head>
+<body>
+  <h1>🥕 ÄLYHÄVIKKI – kameratesti v2</h1>
+  <p class="subtitle">Kameratesti v2 – viivakoodin lukemisen, tarkennuksen ja valotuksen selvittämiseen. Tämä <strong>ei ole sovelluksen uusi julkaisu</strong>. Testi ei lisää tuotteita jääkaappiin eikä tallenna kuvia.</p>
+
+  <section class="panel">
+    <h2>1. Kameran käyttö</h2>
+    <p class="small">Avaa testisivu suoraan Chromessa osoitteesta https://…onrender.com, ei ChatGPT:n sisäisessä esikatselussa.</p>
+    <button class="btn" id="startCamera">📷 Käynnistä kamera ja lue viivakoodi</button>
+    <button class="btn secondary" id="stopCamera">Sulje kamera</button>
+    <div class="viewer" id="viewer" hidden>
+      <video id="video" playsinline muted autoplay></video>
+      <span id="focusRing" class="ring" hidden></span>
+    </div>
+    <div class="controls" id="controls" hidden>
+      <div class="control-item">
+        <label for="zoom">🔎 Zoomaus <output id="zoomLabel">1,0×</output></label>
+        <input id="zoom" type="range" min="1" max="3" step="0.25" value="1">
+        <p class="hint" id="zoomHint">Jos kamera ei tue optista/digitaalista laitezoomausta, käytetään kuvan rajausta.</p>
+      </div>
+      <div class="control-item">
+        <label for="brightness">☀️ Kuvan kirkkaus <output id="brightnessLabel">100 %</output></label>
+        <input id="brightness" type="range" min="100" max="170" step="10" value="100">
+        <p class="hint">Ohjelmallinen kirkastus; ei muuta kameran todellista valotusta.</p>
+      </div>
+      <button class="btn secondary" id="torch" type="button" hidden>🔦 Sytytä taskulamppu</button>
+      <p class="hint" id="focusHint">Napauta viivakoodia kuvassa tarkennuksen pyytämiseksi. Kaikki laitteet eivät tue napautustarkennusta selaimessa.</p>
+    </div>
+    <div class="confirmation" id="confirmation" hidden>
+      <div>Viivakoodi havaittu kolme kertaa:</div>
+      <b id="candidate"></b>
+      <p>Vertaile numeroa pakkauksessa näkyvään numerosarjaan ennen hyväksyntää.</p>
+      <div class="row-buttons">
+        <button class="btn" id="acceptCandidate" type="button">✅ Numero oikein</button>
+        <button class="btn secondary" id="rejectCandidate" type="button">🔄 Lue uudestaan</button>
+      </div>
+    </div>
+    <div class="status" id="cameraStatus" role="status">Kameratestiä ei ole vielä aloitettu.</div>
+  </section>
+
+  <section class="panel">
+    <h2>2. Ota tai valitse kuva</h2>
+    <p class="small">Kuvan viivakoodi luetaan vain puhelimessa, jos selain tukee BarcodeDetectoria. Kuvaa ei lähetetä verkkoon.</p>
+    <label for="picture">Valitse kuva viivakoodista</label>
+    <input id="picture" type="file" accept="image/*" capture="environment">
+    <img class="preview" id="preview" alt="Valittu testikuva" hidden>
+    <div class="status" id="pictureStatus" role="status">Kuvaa ei ole vielä valittu.</div>
+  </section>
+
+  <section class="panel">
+    <h2>3. Viivakoodi ja tuotetietohaku</h2>
+    <label for="barcode">Viivakoodin numerot</label>
+    <input type="text" id="barcode" inputmode="numeric" autocomplete="off" maxlength="14" placeholder="Esim. 6413802010339" value="">
+    <button class="btn secondary" id="checkCode">Tarkista viivakoodi</button>
+    <button class="btn" id="lookup">🌐 Testaa Open Food Facts -yhteys</button>
+    <div class="status" id="lookupStatus" role="status">Hakua ei ole vielä tehty.</div>
+    <p class="links"><a id="external" href="https://fi.openfoodfacts.org/" target="_blank" rel="noopener noreferrer">Avaa Open Food Facts erillisessä välilehdessä</a></p>
+  </section>
+
+  <section class="panel">
+    <h2>Testiympäristö</h2>
+    <div class="status" id="environment"></div>
+    <p class="small">Huom. Jos Chrome estää kameran, tarkista sivuston kameraoikeus (osoiterivin asetukset). Älä anna sovelluksen salasanaa, henkilötietoja tai kuitteja tässä testissä.</p>
+  </section>
+
+<script>
+(() => {
+'use strict';
+const $ = id => document.getElementById(id);
+const set = (id, text) => { $(id).textContent = text; };
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const native = typeof BarcodeDetector === 'function';
+const canvas = document.createElement('canvas');
+const ctx = canvas.getContext('2d', {willReadFrequently:true});
+let detector = null, stream = null, track = null;
+let scanning = false, detectBusy = false, candidate = '', votes = 0, pending = '';
+let zoomMode = 'digital', zoomValue = 1, brightness = 1, torch = false;
+let caps = {}, activeConstraints = {}, focusSupported = false;
+
+function gtinIsValid(raw) {
+  const code = String(raw).replace(/[\s-]/g, '');
+  if (!/^(?:\d{8}|\d{12}|\d{13}|\d{14})$/.test(code)) return false;
+  let sum = 0;
+  for (let i=code.length-2, n=0; i>=0; i--, n++) sum += Number(code[i]) * (n%2===0 ? 3 : 1);
+  return (10-sum%10)%10 === Number(code.at(-1));
+}
+const currentCode = () => $('barcode').value.trim().replace(/[\s-]/g,'');
+function refreshLink() {
+  const code = currentCode();
+  $('external').href = gtinIsValid(code) ? 'https://fi.openfoodfacts.org/tuote/'+encodeURIComponent(code) : 'https://fi.openfoodfacts.org/';
+}
+function setBarcode(raw, source) {
+  const code = String(raw||'').replace(/\D/g,'');
+  if (!gtinIsValid(code)) return false;
+  $('barcode').value = code;
+  refreshLink();
+  set('lookupStatus', source + ' vahvisti viivakoodin '+code+'. Tuotetietoja ei ole vielä haettu.');
+  return true;
+}
+async function getDetector() {
+  if (!native) throw new Error('BarcodeDetector ei ole tämän selaimen käytettävissä. Syötä koodi käsin.');
+  if (!detector) {
+    const supported = typeof BarcodeDetector.getSupportedFormats==='function'
+      ? await BarcodeDetector.getSupportedFormats() : ['ean_13'];
+    if (!supported.includes('ean_13')) throw new Error('Tämä testi vaatii EAN-13-tunnistusta, jota selain ei tue.');
+    detector = new BarcodeDetector({formats:['ean_13']});
+  }
+  return detector;
+}
+function updatePreview() {
+  $('video').style.transform = zoomMode==='digital' ? `scale(${zoomValue})` : 'scale(1)';
+  $('video').style.filter = `brightness(${brightness})`;
+  set('zoomLabel', zoomValue.toFixed(1).replace('.',',')+'×');
+  set('brightnessLabel', Math.round(brightness*100)+' %');
+}
+async function applyHardware(property, value) {
+  if (!track || track.readyState!=='live') return false;
+  const old = activeConstraints[property];
+  activeConstraints[property] = value;
+  try {
+    await track.applyConstraints({advanced:[{...activeConstraints}]});
+    return true;
+  } catch(e) {
+    if (old===undefined) delete activeConstraints[property];
+    else activeConstraints[property] = old;
+    return false;
+  }
+}
+function configureControls() {
+  caps = track?.getCapabilities?.() || {};
+  activeConstraints = {};
+  zoomValue = 1; brightness = 1; torch = false;
+  $('zoom').value='1'; $('brightness').value='100';
+  zoomMode = caps.zoom && Number.isFinite(caps.zoom.min) && Number.isFinite(caps.zoom.max) && caps.zoom.max>caps.zoom.min ? 'hardware' : 'digital';
+  if (zoomMode==='hardware') {
+    const min = Math.max(1, Number(caps.zoom.min));
+    const max = Math.min(4, Number(caps.zoom.max));
+    if (max>min) {
+      $('zoom').min=String(min); $('zoom').max=String(max);
+      $('zoom').step=String(caps.zoom.step||0.1);
+      $('zoom').value=String(min); zoomValue=min;
+    } else zoomMode='digital';
+  }
+  if (zoomMode==='digital') { $('zoom').min='1'; $('zoom').max='3'; $('zoom').step='0.25'; }
+  set('zoomHint',zoomMode==='hardware'?'Käytetään kameran tarjoamaa zoomausta.':'Kameran zoomaus ei ole käytettävissä selaimessa. Käytetään kuvan digitaalista rajausta (ei lisää kuvan tarkkuutta).');
+  $('torch').hidden = caps.torch!==true;
+  $('torch').textContent='🔦 Sytytä taskulamppu';
+  const supported=navigator.mediaDevices?.getSupportedConstraints?.()||{};
+  focusSupported=Boolean(supported.pointsOfInterest && caps.focusMode);
+  set('focusHint',focusSupported?'Napauta viivakoodia tarkennuspisteen valitsemiseksi.':'Napautustarkennus ei ole tämän kameran ja selaimen käytettävissä. Siirrä puhelinta hitaasti hieman lähemmäs tai kauemmas.');
+  $('controls').hidden=false;
+  updatePreview();
+  if (Array.isArray(caps.focusMode) && caps.focusMode.includes('continuous')) {
+    applyHardware('focusMode','continuous').catch(()=>{});
+  }
+}
+function closeCamera() {
+  scanning=false; pending=''; candidate=''; votes=0;
+  if (stream) { stream.getTracks().forEach(t=>t.stop()); stream=null; }
+  track=null; activeConstraints={};
+  $('video').srcObject=null;
+  $('viewer').hidden=true;
+  $('controls').hidden=true;
+  $('confirmation').hidden=true;
+  $('focusRing').hidden=true;
+}
+function imageToDetect() {
+  const video = $('video');
+  if (zoomMode!=='digital' && brightness===1) return video;
+  const w=video.videoWidth, h=video.videoHeight;
+  if (!w || !h) return video;
+  const crop=zoomMode==='digital'?zoomValue:1;
+  const sw=w/crop, sh=h/crop;
+  // Limit processing resolution for mobile; crop matches the preview's central zoom.
+  const scale=Math.min(1,1100/Math.max(sw,sh));
+  canvas.width=Math.max(1,Math.floor(sw*scale));
+  canvas.height=Math.max(1,Math.floor(sh*scale));
+  ctx.filter=`brightness(${brightness})`;
+  ctx.drawImage(video,(w-sw)/2,(h-sh)/2,sw,sh,0,0,canvas.width,canvas.height);
+  ctx.filter='none';
+  return canvas;
+}
+function propose(code, source) {
+  pending=code;
+  scanning=false;
+  set('candidate',code);
+  $('confirmation').hidden=false;
+  set('cameraStatus','🔎 '+source+' havaitsi saman viivakoodin useita kertoja. Vahvista numero pakkauksen perusteella.');
+}
+async function scanLoop() {
+  if (!scanning || detectBusy) return;
+  detectBusy=true;
+  try {
+    const video=$('video');
+    if (video.readyState>=2) {
+      const readings=await (await getDetector()).detect(imageToDetect());
+      const code=readings.map(r=>String(r.rawValue||'').replace(/\D/g,''))
+        .find(x=>x.length===13 && gtinIsValid(x));
+      if (code) {
+        votes = code===candidate ? votes+1 : 1;
+        candidate=code;
+        if (votes>=3) propose(code,'Kamera');
+        else set('cameraStatus','Lukeminen käynnissä: '+votes+'/3 samaa havaintoa. Pidä koodi paikallaan.');
+      } else { votes=0; candidate=''; }
+    }
+  } catch(e) { scanning=false; set('cameraStatus','❌ Tunnistus epäonnistui: '+(e.message||String(e))); }
+  finally { detectBusy=false; }
+  if (scanning) { await sleep(200); if (scanning) scanLoop(); }
+}
+$('startCamera').addEventListener('click', async()=>{
+  closeCamera();
+  set('cameraStatus','Pyydetään kameran käyttöoikeutta…');
+  try {
+    await getDetector();
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error('Selaimen kamera-API puuttuu. Avaa HTTPS-sivusto suoraan Chromessa.');
+    stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}});
+    track=stream.getVideoTracks()[0];
+    $('video').srcObject=stream;
+    $('viewer').hidden=false;
+    await $('video').play();
+    configureControls();
+    scanning=true;
+    set('cameraStatus','✅ Kamera avautui. Zoomaa tarvittaessa, säädä kirkkaus ja kohdista koodi keskelle.');
+    scanLoop();
+  } catch(e) {closeCamera();set('cameraStatus','❌ Kameran avaaminen epäonnistui: '+(e.message||String(e)));}
+});
+$('stopCamera').addEventListener('click',()=>{closeCamera();set('cameraStatus','Kamera suljettu.');});
+$('zoom').addEventListener('input',async()=>{
+  zoomValue=Number($('zoom').value);
+  if (zoomMode==='hardware') {
+    const ok=await applyHardware('zoom',zoomValue);
+    if (!ok) {
+      zoomMode='digital';
+      $('zoom').min='1';$('zoom').max='3';$('zoom').step='0.25';
+      zoomValue=Math.min(3,Math.max(1,zoomValue));
+      $('zoom').value=String(zoomValue);
+      set('zoomHint','Kamera ei sallinut zoomausta. Siirryttiin digitaaliseen rajaukseen.');
+    }
+  }
+  updatePreview();
+});
+$('brightness').addEventListener('input',()=>{brightness=Number($('brightness').value)/100;updatePreview();});
+$('torch').addEventListener('click',async()=>{
+  const ok=await applyHardware('torch',!torch);
+  if (ok) {torch=!torch;$('torch').textContent=torch?'🔦 Sammuta taskulamppu':'🔦 Sytytä taskulamppu';}
+  else set('cameraStatus','Taskulamppu ei käynnistynyt tällä laitteella/selaimella.');
+});
+$('viewer').addEventListener('click',async(e)=>{
+  if (!track || !focusSupported) return;
+  const rect=$('viewer').getBoundingClientRect();
+  const x=Math.min(1,Math.max(0,(e.clientX-rect.left)/rect.width));
+  const y=Math.min(1,Math.max(0,(e.clientY-rect.top)/rect.height));
+  const ring=$('focusRing');ring.hidden=false;
+  ring.style.left=(x*100)+'%';ring.style.top=(y*100)+'%';
+  const ok=await applyHardware('pointsOfInterest',[{x,y}]);
+  set('focusHint',ok?'Tarkennuspiste lähetettiin kameralle; selain voi silti käyttää automaattitarkennusta.':'Selain ei sallinut tarkennuspisteen vaihtoa. Kokeile eri kuvausetäisyyttä.');
+  setTimeout(()=>{ring.hidden=true;},800);
+});
+$('acceptCandidate').addEventListener('click',()=>{
+  if (!pending) return;
+  const confirmed=pending;
+  setBarcode(confirmed,'Käyttäjä');
+  closeCamera();
+  set('cameraStatus','✅ Käyttäjä vahvisti viivakoodin: '+confirmed+'. Tuotetietohaku tehdään erikseen.');
+});
+$('rejectCandidate').addEventListener('click',()=>{
+  pending='';votes=0;candidate='';$('confirmation').hidden=true;
+  if (stream) {scanning=true;set('cameraStatus','Jatketaan skannausta. Kohdista viivakoodi keskelle ja tarkista valaistus.');scanLoop();}
+});
+$('picture').addEventListener('change',async(e)=>{
+  const file=e.target.files?.[0]; if (!file) return;
+  if (!file.type.startsWith('image/')) {set('pictureStatus','Valittu tiedosto ei ole kuva.');return;}
+  let u='';
+  set('pictureStatus','Kuva valittu. Tunnistetaan…');
+  try {
+    u=URL.createObjectURL(file);
+    const img=$('preview');img.src=u;img.hidden=false;
+    await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(Error('Kuvan avaaminen epäonnistui'));});
+    const readings=await (await getDetector()).detect(img);
+    const code=readings.map(r=>String(r.rawValue||'').replace(/\D/g,''))
+      .find(x=>x.length===13 && gtinIsValid(x));
+    if (code) {$('barcode').value=code;refreshLink();set('pictureStatus','Kuvasta löytyi '+code+'. Vertaile numeroa pakkaukseen ennen tuotetietojen hakua.');}
+    else set('pictureStatus','Kuvasta ei tunnistunut kelvollista 13-numeroista EAN-koodia. Kokeile uutta kuvaa.');
+  } catch(err) {set('pictureStatus','Tunnistus epäonnistui: '+(err.message||String(err)));}
+  finally {if (u) URL.revokeObjectURL(u);}
+});
+$('checkCode').addEventListener('click',()=>{
+  const code=currentCode();
+  set('lookupStatus',gtinIsValid(code)?'✅ Koodi '+code+' on tarkistusnumeroltaan kelvollinen, mutta tuote ei välttämättä löydy tietokannasta.':'❌ Koodi puutteellinen tai tarkistusnumero virheellinen. Tarkista kaikki numerot.');
+  refreshLink();
+});
+$('barcode').addEventListener('input',refreshLink);
+$('lookup').addEventListener('click',async()=>{
+  const code=currentCode();
+  if (!gtinIsValid(code)) {set('lookupStatus','❌ Tarkista viivakoodi ensin.');return;}
+  $('lookup').disabled=true;
+  set('lookupStatus','Haetaan tuotetietoja Open Food Factsista…');
+  const controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort(),12000);
+  try {
+    const response=await fetch('https://world.openfoodfacts.org/api/v2/product/'+encodeURIComponent(code)+'.json?fields=code,product_name,product_name_fi,brands',{signal:controller.signal,headers:{Accept:'application/json'}});
+    if (response.status===404) {set('lookupStatus','⚠️ Yhteys toimii, mutta tuotteelle '+code+' ei löytynyt tietoja Open Food Factsista (404).');return;}
+    if (!response.ok) throw new Error('HTTP '+response.status);
+    const type=response.headers.get('content-type')||'';
+    if (!type.toLowerCase().includes('json')) throw new Error('Palvelin ei palauttanut JSON-dataa.');
+    const data=await response.json();
+    if (data.status===1 && data.product) {
+      const name=data.product.product_name_fi||data.product.product_name||'Nimetön tuote';
+      set('lookupStatus','✅ Tuote löytyi: '+name+(data.product.brands?' ('+data.product.brands+')':'')+'.');
+    } else set('lookupStatus','⚠️ Yhteys toimii, mutta tuotetta ei löytynyt.');
+  } catch(e) {
+    set('lookupStatus','❌ Verkkohaku epäonnistui: '+(e.name==='AbortError'?'Aikakatkaisu 12 s':(e.message||String(e))));
+  } finally {clearTimeout(timeout);$('lookup').disabled=false;}
+});
+window.addEventListener('pagehide',closeCamera);
+document.addEventListener('visibilitychange',()=>{if(document.hidden) closeCamera();});
+set('environment','Osoite: '+location.origin+'\nHTTPS: '+(location.protocol==='https:'?'kyllä':'ei')+'\nBarcodeDetector: '+(native?'saatavilla':'ei')+'\nKamerarajapinta: '+(navigator.mediaDevices?.getUserMedia?'saatavilla':'ei saatavilla'));
+refreshLink();
+})();
+</script>
+</body>
+</html>
